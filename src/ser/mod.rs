@@ -298,9 +298,7 @@ impl<'ser, W: Write> serde::ser::Serializer for &'ser mut Serializer<W> {
         variant: &'static str,
     ) -> Result<Self::Ok> {
         debug!("Unit variant {}::{}", name, variant);
-        self.start_tag(variant, HashMap::new())?;
-        self.serialize_unit()?;
-        self.end_tag()?;
+        self.serialize_str(variant)?;
         Ok(())
     }
 
