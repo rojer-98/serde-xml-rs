@@ -37,8 +37,8 @@ use xml::writer::{EmitterConfig, EventWriter, XmlEvent};
 /// println!("{}", serialized);
 /// # }
 /// ```
-pub fn to_writer<W: Write, S: Serialize>(writer: W, value: &S) -> Result<()> {
-    let mut ser = Serializer::new(writer);
+pub fn to_writer<W: Write, S: Serialize>(writer: W, value: &S, is_pretty: bool) -> Result<()> {
+    let mut ser = Serializer::new(writer, is_pretty);
     value.serialize(&mut ser)
 }
 
@@ -65,7 +65,17 @@ pub fn to_writer<W: Write, S: Serialize>(writer: W, value: &S) -> Result<()> {
 pub fn to_string<S: Serialize>(value: &S) -> Result<String> {
     // Create a buffer and serialize our nodes into it
     let mut writer = Vec::with_capacity(128);
-    to_writer(&mut writer, value)?;
+    to_writer(&mut writer, value, false)?;
+
+    // We then check that the serialized string is the same as what we expect
+    let string = String::from_utf8(writer)?;
+    Ok(string)
+}
+
+pub fn to_string_pretty<S: Serialize>(value: &S) -> Result<String> {
+    // Create a buffer and serialize our nodes into it
+    let mut writer = Vec::with_capacity(128);
+    to_writer(&mut writer, value, true)?;
 
     // We then check that the serialized string is the same as what we expect
     let string = String::from_utf8(writer)?;
@@ -96,8 +106,12 @@ where
         }
     }
 
-    pub fn new(writer: W) -> Self {
-        Self::new_from_writer(EmitterConfig::new().create_writer(writer))
+    pub fn new(writer: W, is_pretty: bool) -> Self {
+        Self::new_from_writer(
+            EmitterConfig::new()
+                .perform_indent(is_pretty)
+                .create_writer(writer),
+        )
     }
 
     fn next(&mut self, event: XmlEvent) -> Result<()> {
@@ -262,10 +276,7 @@ impl<'ser, W: Write> serde::ser::Serializer for &'ser mut Serializer<W> {
 
     fn serialize_none(self) -> Result<Self::Ok> {
         debug!("None");
-        let must_close_tag = self.build_start_tag()?;
-        if must_close_tag {
-            self.end_tag()?;
-        }
+        self.abandon_tag()?;
         Ok(())
     }
 
@@ -372,7 +383,11 @@ impl<'ser, W: Write> serde::ser::Serializer for &'ser mut Serializer<W> {
     }
 
     fn serialize_struct(self, name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
-        self.open_root_tag(name)?;
+        if self.root {
+            self.open_root_tag(name)?;
+        } else {
+            self.open_tag(name)?;
+        }
 
         debug!("Struct {}", name);
         Ok(StructSerializer::new(self, false))
@@ -415,7 +430,7 @@ mod tests {
         let mut buffer = Vec::new();
 
         {
-            let mut ser = Serializer::new(&mut buffer);
+            let mut ser = Serializer::new(&mut buffer, false);
             bob.serialize(&mut ser).unwrap();
         }
 
@@ -437,7 +452,7 @@ mod tests {
         let should_be = "<?xml version=\"1.0\" encoding=\"utf-8\"?><Boolean>true</Boolean>";
 
         {
-            let mut ser = Serializer::new(&mut buffer);
+            let mut ser = Serializer::new(&mut buffer, false);
             let node = Node::Boolean(true);
             node.serialize(&mut ser).unwrap();
         }

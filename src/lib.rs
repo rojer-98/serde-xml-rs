@@ -190,5 +190,5 @@ pub mod ser;
 
 pub use crate::de::{from_reader, from_str, Deserializer};
 pub use crate::error::Error;
-pub use crate::ser::{to_string, to_writer, Serializer};
+pub use crate::ser::{to_string, to_string_pretty, to_writer, Serializer};
 pub use xml::reader::{EventReader, ParserConfig};
